@@ -1,12 +1,38 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My GitHub Pages Site</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My GitHub Pages Site</title>
+<style>
+  :root{--bg:#f6f6f4;--panel:#fff;--ink:#1b1b1a;--muted:#6b6b66;--line:#e2e2dd;--accent:#17603f;--accent-soft:#e8f1ec}
+  @media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15171a;--panel:#1d2024;--ink:#e8e8e4;--muted:#9a9a94;--line:#2d3136;--accent:#6fcf9b;--accent-soft:#1b2d25}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:system-ui,-apple-system,"Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;line-height:1.7}
+  .wrap{max-width:720px;margin:0 auto;padding:56px 16px 80px}
+  h1{font-size:26px;margin:0 0 6px;letter-spacing:.01em}
+  p.lead{color:var(--muted);margin:0 0 32px}
+  a.card{display:block;background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:20px 22px;text-decoration:none;color:inherit;transition:border-color .15s}
+  a.card:hover{border-color:var(--accent)}
+  a.card h2{font-size:17px;margin:0 0 6px;color:var(--accent)}
+  a.card p{margin:0;font-size:14px;color:var(--muted)}
+  footer{margin-top:40px;font-size:13px;color:var(--muted)}
+</style>
 </head>
 <body>
-    <h1>Welcome to My GitHub Pages Site</h1>
-    <p>This is my first GitHub Pages deployment!</p>
+<div class="wrap">
+  <h1>Welcome to My GitHub Pages Site</h1>
+  <p class="lead">This is my first GitHub Pages deployment!</p>
+
+  <a class="card" href="aoiro/">
+    <h2>青色申告帳簿 →</h2>
+    <p>複式簿記で記帳して、青色申告決算書（損益計算書・貸借対照表）と所得税の概算まで出す帳簿ツール。
+       令和8年分（2026年分）の控除額に対応。データはブラウザ内にだけ保存されます。</p>
+  </a>
+
+  <footer>Built with Claude Code.</footer>
+</div>
 </body>
 </html>

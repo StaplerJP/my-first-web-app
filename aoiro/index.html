@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="ja" >
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>青色申告帳簿</title>
+<meta name="description" content="複式簿記で記帳して、青色申告決算書と所得税の概算まで出す個人事業用の帳簿ツール。">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <h1>青色申告帳簿 <small>令和8年分（2026年分）／複式簿記・65万円控除対応　提出期間 2027年2月16日〜3月15日</small></h1>
+    <nav class="tabs" role="tablist">
+      <button role="tab" data-pane="input"  aria-selected="true">仕訳入力</button>
+      <button role="tab" data-pane="journal">仕訳帳</button>
+      <button role="tab" data-pane="ledger">総勘定元帳</button>
+      <button role="tab" data-pane="trial">試算表</button>
+      <button role="tab" data-pane="stmt">決算書</button>
+      <button role="tab" data-pane="tax">税額概算</button>
+      <button role="tab" data-pane="setup">設定・期首残高</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+
+<!-- ============ 仕訳入力 ============ -->
+<section class="pane" id="pane-input">
+  <div id="healthBox"></div>
+
+  <div class="card">
+    <h2>仕訳を入力<span class="sub">借方と貸方の合計が一致すると登録できます</span></h2>
+    <div class="tmpl" id="tmplBox"></div>
+    <div class="grid g4">
+      <div><label class="f" for="inDate">日付</label><input type="date" id="inDate"></div>
+      <div><label class="f" for="inPartner">相手先</label><input type="text" id="inPartner" placeholder="A社"></div>
+      <div style="grid-column:span 2"><label class="f" for="inMemo">摘要</label><input type="text" id="inMemo" placeholder="Webサイト制作費 4月分"></div>
+    </div>
+    <div style="margin-top:12px">
+      <label class="f">仕訳明細</label>
+      <div class="lines" id="lineBox"></div>
+      <div class="row" style="margin-top:8px">
+        <button class="btn ghost sm" id="addLine">＋ 行を追加</button>
+        <span class="hint" id="lineSum"></span>
+      </div>
+    </div>
+    <div id="entryMsg"></div>
+    <div class="row" style="margin-top:12px">
+      <button class="btn" id="saveEntry">この仕訳を登録</button>
+      <button class="btn ghost" id="clearEntry">クリア</button>
+      <span class="hint right" id="editingNote"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>家事按分の計算<span class="sub">自宅兼事務所の家賃・光熱費・通信費など</span></h2>
+    <div class="grid g4">
+      <div><label class="f" for="abTotal">支払総額</label><input type="number" id="abTotal" class="num" placeholder="120000"></div>
+      <div><label class="f" for="abRate">事業使用割合（％）</label><input type="number" id="abRate" class="num" placeholder="30"></div>
+      <div><label class="f">事業分（経費）</label><input type="text" id="abBiz" class="num" readonly></div>
+      <div><label class="f">家事分（経費外）</label><input type="text" id="abHome" class="num" readonly></div>
+    </div>
+    <p class="hint" style="margin:8px 0 0">事業分だけを経費科目に、残りは計上しません。割合の根拠（床面積・使用時間など）はメモに残しておくと調査時に説明できます。</p>
+  </div>
+
+  <div class="card">
+    <h2>直近の仕訳<span class="sub">最新20件</span></h2>
+    <div class="scroll"><table id="recentTbl"></table></div>
+  </div>
+</section>
+
+<!-- ============ 仕訳帳 ============ -->
+<section class="pane" id="pane-journal" hidden>
+  <div class="card">
+    <h2>仕訳帳</h2>
+    <div class="row" style="margin-bottom:10px">
+      <input type="text" id="jSearch" placeholder="摘要・相手先・科目で検索" style="max-width:280px">
+      <select id="jMonth" style="max-width:150px"></select>
+      <button class="btn ghost sm" id="exportCsv">CSVを書き出す</button>
+      <label class="btn ghost sm" for="importCsv" style="cursor:pointer">CSVを読み込む</label>
+      <input type="file" id="importCsv" accept=".csv,text/csv" hidden>
+      <span class="hint right" id="jCount"></span>
+    </div>
+    <div id="csvMsg"></div>
+    <div class="scroll"><table id="journalTbl"></table></div>
+  </div>
+  <details class="help">
+    <summary>CSVの形式</summary>
+    <p class="hint">1行＝仕訳1明細。列は <code>日付,借方科目,借方金額,貸方科目,貸方金額,摘要,相手先,仕訳番号</code>。
+    複合仕訳は同じ仕訳番号で複数行にします。科目は名称（例：通信費）またはコード（例：605）。
+    金額はカンマなしの数値。他社の会計ソフトから出した明細も、この列順に並べ替えれば読み込めます。</p>
+  </details>
+</section>
+
+<!-- ============ 総勘定元帳 ============ -->
+<section class="pane" id="pane-ledger" hidden>
+  <div class="card">
+    <h2>総勘定元帳</h2>
+    <div class="row" style="margin-bottom:10px">
+      <select id="ledgerAc" style="max-width:260px"></select>
+      <span class="hint">期首残高は「設定・期首残高」で入れます</span>
+    </div>
+    <div class="scroll"><table id="ledgerTbl"></table></div>
+  </div>
+</section>
+
+<!-- ============ 試算表 ============ -->
+<section class="pane" id="pane-trial" hidden>
+  <div class="card">
+    <h2>合計残高試算表</h2>
+    <div id="trialMsg"></div>
+    <div class="scroll"><table id="trialTbl"></table></div>
+  </div>
+</section>
+
+<!-- ============ 決算書 ============ -->
+<section class="pane" id="pane-stmt" hidden>
+  <div class="card">
+    <h2>損益計算書<span class="sub">青色申告決算書 1ページ目に対応</span></h2>
+    <div class="scroll"><table id="plTbl"></table></div>
+    <p class="src">決算書の行番号（①㉜㊸など）は様式が年によって動くため表示していません。転記するときは国税庁の様式の見出し名で突き合わせてください。</p>
+  </div>
+  <div class="card">
+    <h2>貸借対照表<span class="sub">青色申告決算書 4ページ目に対応</span></h2>
+    <div id="bsMsg"></div>
+    <div class="scroll"><table id="bsTbl"></table></div>
+  </div>
+  <div class="row"><button class="btn ghost" onclick="window.print()">印刷 / PDFで保存</button></div>
+</section>
+
+<!-- ============ 税額概算 ============ -->
+<section class="pane" id="pane-tax" hidden>
+  <div class="card">
+    <h2>給与と事業所得を合算した概算<span class="sub">令和8年分の控除額で計算</span></h2>
+    <div class="grid g3">
+      <div><label class="f" for="txKyuyo">給与の収入金額（源泉徴収票の支払金額）</label><input type="number" id="txKyuyo" class="num"></div>
+      <div><label class="f" for="txGensen">源泉徴収税額（給与）</label><input type="number" id="txGensen" class="num"></div>
+      <div><label class="f" for="txShakai">社会保険料控除（給与＋国民年金等）</label><input type="number" id="txShakai" class="num"></div>
+      <div><label class="f" for="txIdeco">小規模企業共済等掛金（iDeCo等）</label><input type="number" id="txIdeco" class="num"></div>
+      <div><label class="f" for="txSeimei">生命保険料控除</label><input type="number" id="txSeimei" class="num"></div>
+      <div><label class="f" for="txIryo">医療費控除</label><input type="number" id="txIryo" class="num"></div>
+      <div><label class="f" for="txKifu">寄附金控除</label><input type="number" id="txKifu" class="num"></div>
+      <div><label class="f" for="txOther">その他の所得控除（配偶者・扶養など）</label><input type="number" id="txOther" class="num"></div>
+      <div><label class="f" for="txYotei">予定納税額</label><input type="number" id="txYotei" class="num"></div>
+    </div>
+    <p class="hint" style="margin:10px 0 0">事業所得は帳簿から自動で入ります。所得控除の額は源泉徴収票と控除証明書の数字をそのまま入れてください。</p>
+  </div>
+  <div class="card">
+    <h2>結果</h2>
+    <div class="kpi" id="taxKpi"></div>
+    <div class="scroll" style="margin-top:14px"><table id="taxTbl"></table></div>
+    <div id="taxMsg"></div>
+    <p class="src">出典：国税庁タックスアンサー
+      <a href="https://www.nta.go.jp/taxes/shiraberu/taxanswer/shotoku/1199.htm">No.1199 基礎控除</a>／
+      <a href="https://www.nta.go.jp/taxes/shiraberu/taxanswer/shotoku/1410.htm">No.1410 給与所得控除</a>／
+      <a href="https://www.nta.go.jp/taxes/shiraberu/taxanswer/shotoku/2072.htm">No.2072 青色申告特別控除</a>／
+      <a href="https://www.nta.go.jp/taxes/shiraberu/taxanswer/shotoku/2260.htm">No.2260 所得税の税率</a>（令和8年4月1日現在法令等）
+    </p>
+  </div>
+</section>
+
+<!-- ============ 設定 ============ -->
+<section class="pane" id="pane-setup" hidden>
+  <div class="card">
+    <h2>基本設定</h2>
+    <div class="grid g3">
+      <div><label class="f" for="stName">氏名</label><input type="text" id="stName"></div>
+      <div><label class="f" for="stYago">屋号</label><input type="text" id="stYago"></div>
+      <div><label class="f" for="stJob">事業の種類</label><input type="text" id="stJob" placeholder="ソフトウェア開発"></div>
+      <div>
+        <label class="f" for="stAoiro">青色申告特別控除</label>
+        <select id="stAoiro">
+          <option value="65">65万円（複式簿記＋e-Tax送信 または 優良な電子帳簿保存＋届出書）</option>
+          <option value="55">55万円（複式簿記・書面提出）</option>
+          <option value="10">10万円（簡易簿記など）</option>
+        </select>
+      </div>
+      <div><label class="f" for="stYear">対象年</label><input type="number" id="stYear" class="num" value="2026"></div>
+    </div>
+    <div id="aoiroNote"></div>
+  </div>
+
+  <div class="card">
+    <h2>期首残高<span class="sub">1月1日時点の残高。開業初年度なら元入金と現金・預金だけでも可</span></h2>
+    <div class="scroll"><table id="openTbl"></table></div>
+    <div id="openMsg"></div>
+  </div>
+
+  <div class="card">
+    <h2>データの保管</h2>
+    <p class="hint" style="margin-top:0">入力したデータはこのブラウザの中（localStorage）にだけ保存されます。サーバーには送られません。
+    ブラウザのデータを消すと失われるので、定期的にJSONを書き出して手元に保存してください。
+    帳簿書類の保存期間は原則7年です。</p>
+    <div class="row">
+      <button class="btn ghost sm" id="expJson">JSONを書き出す（バックアップ）</button>
+      <label class="btn ghost sm" for="impJson" style="cursor:pointer">JSONを読み込む</label>
+      <input type="file" id="impJson" accept=".json,application/json" hidden>
+      <button class="btn ghost sm" id="loadDemo">サンプルデータを入れる</button>
+      <button class="btn danger sm right" id="wipe">全データを削除</button>
+    </div>
+    <div id="dataMsg"></div>
+  </div>
+</section>
+
+</main>
+
+<footer class="ft"><div class="wrap">
+  税額は概算です。実際の申告額は国税庁の確定申告書等作成コーナーまたはe-Taxで確定させてください。
+  個別の判断（事業所得か雑所得か、按分割合、減価償却の方法など）は税務署か税理士に確認してください。
+</div></footer>
+
+<script src="accounts.js"></script>
+<script src="tax.js"></script>
+<script src="ledger.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
