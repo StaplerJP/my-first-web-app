@@ -15,6 +15,7 @@
       <button role="tab" data-pane="input"  aria-selected="true">仕訳入力</button>
       <button role="tab" data-pane="journal">仕訳帳</button>
       <button role="tab" data-pane="ledger">総勘定元帳</button>
+      <button role="tab" data-pane="assets">固定資産</button>
       <button role="tab" data-pane="trial">試算表</button>
       <button role="tab" data-pane="stmt">決算書</button>
       <button role="tab" data-pane="tax">税額概算</button>
@@ -105,6 +106,67 @@
   </div>
 </section>
 
+<!-- ============ 固定資産 ============ -->
+<section class="pane" id="pane-assets" hidden>
+  <div class="card">
+    <h2>固定資産台帳<span class="sub">中古資産の耐用年数と月割りを自動で計算します</span></h2>
+    <div class="grid g3">
+      <div style="grid-column:span 2"><label class="f" for="asName">資産の名前</label><input type="text" id="asName" placeholder="日産ノート（中古）"></div>
+      <div><label class="f" for="asPreset">用途から耐用年数を選ぶ</label><select id="asPreset"></select></div>
+      <div><label class="f" for="asAcct">勘定科目</label><select id="asAcct"></select></div>
+      <div><label class="f" for="asDate">取得日</label><input type="date" id="asDate"></div>
+      <div><label class="f" for="asStart">業務供用日<span class="hint">（使い始めた日）</span></label><input type="date" id="asStart"></div>
+      <div><label class="f" for="asCost">取得価額（円）</label><input type="number" id="asCost" class="num" placeholder="450000"></div>
+      <div>
+        <label class="f" for="asUsed">新品／中古</label>
+        <select id="asUsed"><option value="0">新品</option><option value="1" selected>中古</option></select>
+      </div>
+      <div id="asRegWrap"><label class="f" for="asReg">初度登録・製造年月</label><input type="month" id="asReg"></div>
+      <div><label class="f" for="asLegal">法定耐用年数（年）</label><input type="number" id="asLegal" class="num" placeholder="6"></div>
+      <div><label class="f" for="asYears">使う耐用年数（年）<span class="hint">空欄なら自動</span></label><input type="number" id="asYears" class="num"></div>
+      <div><label class="f" for="asMethod">償却方法</label><select id="asMethod"></select></div>
+      <div><label class="f" for="asRatio">事業専用割合（％）</label><input type="number" id="asRatio" class="num" value="100"></div>
+      <div style="grid-column:span 2"><label class="f" for="asMemo">メモ<span class="hint">（按分の根拠など）</span></label><input type="text" id="asMemo" placeholder="週3日 営業訪問に使用。走行距離ベースで70%"></div>
+    </div>
+    <div id="asSuggest"></div>
+    <div class="row" style="margin-top:12px">
+      <button class="btn" id="asSave">台帳に登録</button>
+      <button class="btn ghost" id="asClear">クリア</button>
+      <span class="hint right" id="asEditing"></span>
+    </div>
+    <div id="asMsg"></div>
+  </div>
+
+  <div class="card">
+    <h2>登録した資産<span class="sub" id="asYearLabel"></span></h2>
+    <div class="scroll"><table id="asTbl"></table></div>
+    <div id="asTotal"></div>
+    <div class="row" style="margin-top:12px">
+      <button class="btn" id="asPost">当年の減価償却仕訳を作成・更新</button>
+      <span class="hint">12月31日付で「減価償却費 ／ 資産科目」の仕訳を作ります。家事分は事業主貸に振り替えます。</span>
+    </div>
+    <div id="asPostMsg"></div>
+  </div>
+
+  <div class="card" id="asSchedWrap" hidden>
+    <h2>償却スケジュール<span class="sub" id="asSchedName"></span></h2>
+    <div class="scroll"><table id="asSchedTbl"></table></div>
+  </div>
+
+  <details class="help">
+    <summary>計算の根拠</summary>
+    <p class="hint">
+      中古資産の耐用年数は簡便法です。法定耐用年数の全部を経過していれば「法定×20％」、一部なら「(法定−経過)＋経過×20％」。
+      1年未満は切り捨て、2年未満は2年になります（国税庁 No.5404）。<br>
+      年の途中で使い始めた資産は、計算した償却費に「業務に使った月数 ÷ 12」を掛けます（No.2106）。
+      一括償却資産と少額減価償却資産の特例には月割がありません。<br>
+      個人の法定償却方法は定額法です。定率法を使うには「減価償却資産の償却方法の届出書」を提出期限までに出す必要があります（No.2100）。<br>
+      少額減価償却資産の特例（措法28の2）の上限は、令和8年4月1日以後の取得で40万円未満、令和8年3月31日までの取得で30万円未満。青色申告者で年300万円までです（No.2100 注3）。
+      決算書の減価償却費の計算欄に、摘要として「措法28の2」と書きます。
+    </p>
+  </details>
+</section>
+
 <!-- ============ 試算表 ============ -->
 <section class="pane" id="pane-trial" hidden>
   <div class="card">
@@ -125,6 +187,10 @@
     <h2>貸借対照表<span class="sub">青色申告決算書 4ページ目に対応</span></h2>
     <div id="bsMsg"></div>
     <div class="scroll"><table id="bsTbl"></table></div>
+  </div>
+  <div class="card" id="depCard" hidden>
+    <h2>減価償却費の計算<span class="sub">青色申告決算書 3ページ目に対応</span></h2>
+    <div class="scroll"><table id="depTbl"></table></div>
   </div>
   <div class="row"><button class="btn ghost" onclick="window.print()">印刷 / PDFで保存</button></div>
 </section>
@@ -213,6 +279,7 @@
 <script src="accounts.js"></script>
 <script src="tax.js"></script>
 <script src="ledger.js"></script>
+<script src="depreciation.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

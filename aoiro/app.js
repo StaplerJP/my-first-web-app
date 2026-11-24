@@ -14,6 +14,8 @@ const BLANK = {
   opening: {},
   journal: [],
   seq: 1,
+  assets: [],
+  assetSeq: 1,
 };
 let S = load();
 let editingId = null;
@@ -39,7 +41,7 @@ function msg(box, kind, html) {
 }
 
 /* ---------------- タブ ---------------- */
-const PANES = ['input','journal','ledger','trial','stmt','tax','setup'];
+const PANES = ['input','journal','ledger','assets','trial','stmt','tax','setup'];
 document.querySelectorAll('nav.tabs button').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('nav.tabs button').forEach(b => b.setAttribute('aria-selected', String(b === btn)));
@@ -524,7 +526,9 @@ el('loadDemo').onclick = () => {
   add('01-31','Webサイト保守 1月分','A社',[{ac:'104',side:'D',amount:88000},{ac:'401',side:'C',amount:88000}]);
   add('02-25','1月分入金','A社',[{ac:'102',side:'D',amount:88000},{ac:'104',side:'C',amount:88000}]);
   add('03-15','ランディングページ制作','B商店',[{ac:'102',side:'D',amount:220000},{ac:'601',side:'D',amount:0},{ac:'401',side:'C',amount:220000}]);
-  add('04-10','ノートPC','量販店',[{ac:'610',side:'D',amount:148000},{ac:'202',side:'C',amount:148000}]);
+  add('04-10','ノートPC','量販店',[{ac:'112',side:'D',amount:148000},{ac:'202',side:'C',amount:148000}]);
+  add('04-20','中古車（2021年5月初度登録）','中古車店',[{ac:'111',side:'D',amount:450000},{ac:'290',side:'C',amount:450000}]);
+  add('04-22','スタッドレスタイヤ4本','タイヤ店',[{ac:'621',side:'D',amount:62000},{ac:'290',side:'C',amount:62000}]);
   add('04-30','カード引落','カード',[{ac:'202',side:'D',amount:148000},{ac:'102',side:'C',amount:148000}]);
   add('05-01','自宅家賃 按分30%','大家',[{ac:'616',side:'D',amount:36000},{ac:'290',side:'C',amount:36000}]);
   add('05-20','サーバー・ドメイン','ホスティング',[{ac:'605',side:'D',amount:14300},{ac:'102',side:'C',amount:14300}]);
@@ -533,18 +537,276 @@ el('loadDemo').onclick = () => {
   add('09-30','コンサル料','C社',[{ac:'104',side:'D',amount:330000},{ac:'401',side:'C',amount:330000}]);
   add('10-25','9月分入金','C社',[{ac:'102',side:'D',amount:330000},{ac:'104',side:'C',amount:330000}]);
   add('11-30','打合せ交通費','',[{ac:'604',side:'D',amount:12400},{ac:'290',side:'C',amount:12400}]);
-  add('12-31','減価償却費（PC以外）','',[{ac:'611',side:'D',amount:45000},{ac:'112',side:'C',amount:45000}]);
   S.journal = S.journal.map(e => ({ ...e, lines: e.lines.filter(l => l.amount !== 0) }));
+  S.assets = [
+    { id:1, name:'中古車（普通自動車）', acct:'111', acquireDate:`${y}-04-20`, startDate:`${y}-04-20`,
+      cost:450000, used:true, firstRegYM:'2021-05', legalYears:6, yearsManual:0,
+      method:'teigaku', bizRatio:70, memo:'週3日 営業訪問。走行距離ベースで70%' },
+    { id:2, name:'ノートPC', acct:'112', acquireDate:`${y}-04-10`, startDate:`${y}-04-10`,
+      cost:148000, used:false, firstRegYM:'', legalYears:4, yearsManual:0,
+      method:'tokurei', bizRatio:90, memo:'開発用。私用1割' },
+  ];
+  S.assetSeq = 3;
   S.tax = { kyuyo:5200000, gensen:138000, shakai:790000, ideco:0, seimei:40000, iryo:0, kifu:0, other:0, yotei:0 };
   S.settings.job = S.settings.job || 'Web制作';
-  save(); boot(); msg('dataMsg','ok','サンプルを入れました。各タブで動きを確認できます。');
+  save(); postDepreciation(); boot();
+  msg('dataMsg','ok','サンプルを入れました。固定資産タブに中古車とPCが入っていて、減価償却仕訳も作成済みです。');
 };
+
+/* ================= 固定資産台帳 ================= */
+let editingAsset = null, schedFor = null;
+
+function assetYears(a) { return resolveYears(a); }
+
+function initAssetForm() {
+  const pre = el('asPreset');
+  pre.innerHTML = '<option value="">選ばない（法定耐用年数を自分で入れる）</option>' +
+    TAIYO_PRESETS.map(g => `<optgroup label="${esc(g.group)}">` +
+      g.items.map(([n, y]) => `<option value="${esc(g.acct)}|${y}|${esc(n)}">${esc(n)}（${y}年）</option>`).join('') +
+      '</optgroup>').join('');
+  el('asAcct').innerHTML = ACCOUNTS.filter(a => a.row === 'asset' && a.code !== '190')
+    .map(a => `<option value="${a.code}">${a.code} ${esc(a.name)}</option>`).join('');
+  el('asMethod').innerHTML = Object.entries(METHODS)
+    .map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join('');
+
+  pre.onchange = () => {
+    const v = pre.value; if (!v) return;
+    const [acct, years, name] = v.split('|');
+    el('asAcct').value = acct; el('asLegal').value = years;
+    if (!el('asName').value) el('asName').value = name;
+    refreshSuggest();
+  };
+  el('asUsed').onchange = () => { el('asRegWrap').style.display = el('asUsed').value === '1' ? '' : 'none'; refreshSuggest(); };
+  ['asDate','asStart','asCost','asReg','asLegal','asYears','asMethod','asRatio'].forEach(id => {
+    el(id).oninput = refreshSuggest; el(id).onchange = refreshSuggest;
+  });
+  el('asDate').onchange = () => { if (!el('asStart').value) el('asStart').value = el('asDate').value; refreshSuggest(); };
+  el('asSave').onclick = saveAsset;
+  el('asClear').onclick = () => resetAssetForm();
+  el('asPost').onclick = postDepreciation;
+  resetAssetForm();
+}
+
+function formAsset() {
+  return {
+    id: editingAsset ?? S.assetSeq,
+    name: el('asName').value.trim(),
+    acct: el('asAcct').value,
+    acquireDate: el('asDate').value,
+    startDate: el('asStart').value || el('asDate').value,
+    cost: Math.round(+el('asCost').value || 0),
+    used: el('asUsed').value === '1',
+    firstRegYM: el('asReg').value,
+    legalYears: +el('asLegal').value || 0,
+    yearsManual: +el('asYears').value || 0,
+    method: el('asMethod').value,
+    bizRatio: Math.min(100, Math.max(0, +el('asRatio').value || 0)),
+    memo: el('asMemo').value.trim(),
+  };
+}
+
+function refreshSuggest() {
+  const a = formAsset();
+  if (!a.cost || !a.acquireDate) { msg('asSuggest', '', ''); return; }
+  const sg = suggest(a.cost, a.acquireDate, true);
+  const y = a.method === 'teigaku' || a.method === 'teiritsu' ? assetYears(a) : null;
+  let extra = '';
+  if (y) {
+    const rate = a.method === 'teiritsu' ? TEIRITSU[y].r : TEIGAKU[y];
+    extra = `<br>耐用年数 <b>${y}年</b>（償却率 ${rate.toFixed(3)}）`;
+    if (a.used && a.firstRegYM) {
+      const em = monthsElapsed(a.firstRegYM, String(a.acquireDate).slice(0, 7));
+      extra += `　中古・経過 ${em}か月なので簡便法で短縮しています。`;
+    }
+    const r0 = schedule({ ...a, years: y }).find(r => r.year === S.year);
+    if (r0) extra += `<br>${S.year}年分の償却費 <b>${F(r0.dep)}</b> 円（${r0.months}か月）、うち必要経費 <b>${F(r0.biz)}</b> 円`;
+  } else {
+    const r0 = schedule(a).find(r => r.year === S.year);
+    if (r0) extra += `<br>${S.year}年分の償却費 <b>${F(r0.dep)}</b> 円、うち必要経費 <b>${F(r0.biz)}</b> 円`;
+  }
+  msg('asSuggest', sg.method === a.method ? 'ok' : 'warn',
+    `<b>${esc(sg.label)}</b>：${esc(sg.note)}${extra}`);
+}
+
+function saveAsset() {
+  const a = formAsset();
+  const errs = [];
+  if (!a.name) errs.push('資産の名前を入れてください');
+  if (!a.acquireDate) errs.push('取得日を入れてください');
+  if (!a.cost) errs.push('取得価額を入れてください');
+  if ((a.method === 'teigaku' || a.method === 'teiritsu')) {
+    if (!a.legalYears && !a.yearsManual) errs.push('法定耐用年数を入れるか、用途を選んでください');
+    if (a.used && !a.firstRegYM) errs.push('中古なら初度登録・製造年月を入れてください');
+  }
+  if (errs.length) { msg('asMsg', 'bad', '<ul>' + errs.map(x => `<li>${esc(x)}</li>`).join('') + '</ul>'); return; }
+  a.years = assetYears(a);
+  if (editingAsset != null) {
+    S.assets = S.assets.map(x => x.id === editingAsset ? a : x);
+    msg('asMsg', 'ok', `${esc(a.name)} を更新しました。`);
+  } else {
+    S.assets.push(a); S.assetSeq++;
+    msg('asMsg', 'ok', `${esc(a.name)} を台帳に登録しました。減価償却仕訳は下のボタンで作れます。`);
+  }
+  save(); resetAssetForm(false); renderAll();
+}
+
+function resetAssetForm(clear = true) {
+  editingAsset = null;
+  ['asName','asCost','asReg','asLegal','asYears','asMemo'].forEach(id => el(id).value = '');
+  el('asPreset').value = ''; el('asUsed').value = '1'; el('asRatio').value = '100';
+  el('asMethod').value = 'teigaku';
+  el('asRegWrap').style.display = '';
+  el('asDate').value = `${S.year}-12-31`; el('asStart').value = '';
+  el('asEditing').textContent = '';
+  if (clear) msg('asMsg', '', '');
+  msg('asSuggest', '', '');
+}
+
+function editAsset(id) {
+  const a = S.assets.find(x => x.id === id); if (!a) return;
+  editingAsset = id;
+  el('asName').value = a.name; el('asAcct').value = a.acct;
+  el('asDate').value = a.acquireDate; el('asStart').value = a.startDate;
+  el('asCost').value = a.cost; el('asUsed').value = a.used ? '1' : '0';
+  el('asReg').value = a.firstRegYM || ''; el('asLegal').value = a.legalYears || '';
+  el('asYears').value = a.yearsManual || ''; el('asMethod').value = a.method;
+  el('asRatio').value = a.bizRatio; el('asMemo').value = a.memo || '';
+  el('asRegWrap').style.display = a.used ? '' : 'none';
+  el('asEditing').textContent = `${a.name} を編集中`;
+  refreshSuggest();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function delAsset(id) {
+  const a = S.assets.find(x => x.id === id); if (!a) return;
+  if (!confirm(`「${a.name}」を台帳から削除します。よろしいですか？\n（作成済みの減価償却仕訳は残るので、必要なら仕訳帳で消してください）`)) return;
+  S.assets = S.assets.filter(x => x.id !== id);
+  if (schedFor === id) schedFor = null;
+  save(); renderAll();
+}
+
+function assetRow(a) { return yearRow({ ...a, years: assetYears(a) }, S.year); }
+
+function renderAssets() {
+  el('asYearLabel').textContent = `${S.year}年分`;
+  const rows = S.assets.map(a => {
+    const r = assetRow(a);
+    const y = (a.method === 'teigaku' || a.method === 'teiritsu') ? assetYears(a) : null;
+    const rate = y ? (a.method === 'teiritsu' ? TEIRITSU[y].r : TEIGAKU[y]) : null;
+    return `<tr>
+      <td>${esc(a.name)}${a.used ? ' <span class="pill">中古</span>' : ''}<div class="hint">${esc(BY_CODE[a.acct] ? BY_CODE[a.acct].name : a.acct)}${a.memo ? ' / ' + esc(a.memo) : ''}</div></td>
+      <td style="white-space:nowrap">${esc(a.acquireDate)}</td>
+      <td class="n">${F(a.cost)}</td>
+      <td style="white-space:nowrap">${esc(METHODS[a.method].replace('（届出が必要）','').replace('（3年均等）','').replace('（全額）',''))}</td>
+      <td class="n">${y ? y + '年' : '—'}</td>
+      <td class="n">${rate ? rate.toFixed(3) : '—'}</td>
+      <td class="n">${r ? F(r.dep) : '0'}</td>
+      <td class="n">${a.bizRatio}%</td>
+      <td class="n"><b>${r ? F(r.biz) : '0'}</b></td>
+      <td class="n">${r ? F(r.close) : '—'}</td>
+      <td style="white-space:nowrap">
+        <button class="btn sm ghost" data-sched="${a.id}">内訳</button>
+        <button class="btn sm ghost" data-aedit="${a.id}">編集</button>
+        <button class="x" data-adel="${a.id}" title="削除">×</button></td></tr>`;
+  }).join('');
+  el('asTbl').innerHTML = rowsTable(
+    '<th>資産</th><th>取得日</th><th class="n">取得価額</th><th>償却方法</th><th class="n">耐用年数</th><th class="n">償却率</th><th class="n">本年の償却費</th><th class="n">事業割合</th><th class="n">必要経費</th><th class="n">期末残高</th><th></th>',
+    rows || '<tr><td colspan="11" class="hint">まだ登録がありません。中古車やパソコンを登録すると、耐用年数と月割りを自動で計算します。</td></tr>');
+  el('asTbl').querySelectorAll('[data-aedit]').forEach(b => b.onclick = () => editAsset(+b.dataset.aedit));
+  el('asTbl').querySelectorAll('[data-adel]').forEach(b => b.onclick = () => delAsset(+b.dataset.adel));
+  el('asTbl').querySelectorAll('[data-sched]').forEach(b => b.onclick = () => { schedFor = +b.dataset.sched; renderSchedule(); });
+
+  const tot = S.assets.reduce((s, a) => { const r = assetRow(a); return s + (r ? r.biz : 0); }, 0);
+  const totAll = S.assets.reduce((s, a) => { const r = assetRow(a); return s + (r ? r.dep : 0); }, 0);
+  const tokurei = S.assets.filter(a => a.method === 'tokurei' && assetRow(a))
+                          .reduce((s, a) => s + a.cost, 0);
+  let warn = '';
+  if (tokurei > 3000000) warn = `<br><b>少額減価償却資産の特例の合計が ${F(tokurei)} 円で、年300万円の上限を超えています。</b>超える分は通常の減価償却にしてください。`;
+  msg('asTotal', warn ? 'warn' : 'ok',
+    S.assets.length
+      ? `${S.year}年分の償却費は合計 ${F(totAll)} 円、うち必要経費に入るのは <b>${F(tot)}</b> 円です。${warn}`
+      : '');
+  renderSchedule();
+  renderDepDetail();
+}
+
+function renderSchedule() {
+  const a = S.assets.find(x => x.id === schedFor);
+  el('asSchedWrap').hidden = !a;
+  if (!a) return;
+  el('asSchedName').textContent = a.name;
+  const rows = schedule({ ...a, years: assetYears(a) }).map(r => `
+    <tr${r.year === S.year ? ' class="sub"' : ''}>
+      <td class="n">${r.year}年</td><td class="n">${r.months}か月</td>
+      <td class="n">${F(r.open)}</td><td class="n">${F(r.dep)}</td>
+      <td class="n">${F(r.biz)}</td><td class="n">${F(r.close)}</td>
+      <td class="hint">${esc(r.note || '')}</td></tr>`).join('');
+  el('asSchedTbl').innerHTML = rowsTable(
+    '<th class="n">年</th><th class="n">使用月数</th><th class="n">期首残高</th><th class="n">償却費</th><th class="n">うち必要経費</th><th class="n">期末残高</th><th>摘要</th>',
+    rows);
+}
+
+/* 決算書の「減価償却費の計算」 */
+function renderDepDetail() {
+  const live = S.assets.filter(a => assetRow(a));
+  el('depCard').hidden = !live.length;
+  if (!live.length) return;
+  const rows = live.map(a => {
+    const r = assetRow(a);
+    const y = (a.method === 'teigaku' || a.method === 'teiritsu') ? assetYears(a) : null;
+    const rate = y ? (a.method === 'teiritsu' ? TEIRITSU[y].r : TEIGAKU[y]) : null;
+    const note = a.method === 'tokurei' ? '措法28の2'
+               : a.method === 'ikkatsu' ? '一括償却'
+               : (a.used ? '中古・簡便法' : '');
+    return `<tr>
+      <td>${esc(a.name)}</td><td style="white-space:nowrap">${esc(String(a.acquireDate).slice(0,7))}</td>
+      <td class="n">${F(a.cost)}</td><td class="n">${F(r.open)}</td>
+      <td>${esc(METHODS[a.method].split('（')[0])}</td>
+      <td class="n">${y || '—'}</td><td class="n">${rate ? rate.toFixed(3) : '—'}</td>
+      <td class="n">${r.months}/12</td><td class="n">${F(r.dep)}</td>
+      <td class="n">${a.bizRatio}%</td><td class="n"><b>${F(r.biz)}</b></td>
+      <td class="n">${F(r.close)}</td><td class="hint">${esc(note)}</td></tr>`;
+  }).join('');
+  const sum = live.reduce((s, a) => s + assetRow(a).biz, 0);
+  el('depTbl').innerHTML = rowsTable(
+    '<th>資産</th><th>取得年月</th><th class="n">取得価額</th><th class="n">償却の基礎になる金額</th><th>方法</th><th class="n">年数</th><th class="n">償却率</th><th class="n">本年中の月数</th><th class="n">償却費</th><th class="n">事業割合</th><th class="n">必要経費算入額</th><th class="n">期末残高</th><th>摘要</th>',
+    rows + `<tr class="total"><td colspan="10">必要経費算入額 合計</td><td class="n">${F(sum)}</td><td colspan="2"></td></tr>`);
+}
+
+/* 当年の減価償却仕訳を作る（既存の自動仕訳は作り直す） */
+function postDepreciation() {
+  const before = S.journal.length;
+  S.journal = S.journal.filter(e => !(e.auto && e.auto.startsWith('dep:') && e.date.slice(0, 4) === String(S.year)));
+  const removed = before - S.journal.length;
+  let made = 0, skipped = [];
+  for (const a of S.assets) {
+    const r = assetRow(a);
+    if (!r || r.dep <= 0) { skipped.push(`${a.name}：${S.year}年分の償却はありません`); continue; }
+    const home = r.dep - r.biz;
+    const lines = [{ ac: '611', side: 'D', amount: r.biz }];
+    if (home > 0) lines.push({ ac: '190', side: 'D', amount: home });
+    lines.push({ ac: a.acct, side: 'C', amount: r.dep });
+    const e = {
+      id: S.seq++, date: `${S.year}-12-31`,
+      memo: `減価償却費 ${a.name}` + (a.method === 'tokurei' ? '（措法28の2）' : ''),
+      partner: '', lines: lines.filter(l => l.amount > 0), auto: `dep:${a.id}`,
+    };
+    const v = validateEntry(e, S.year, BY_CODE);
+    if (!v.ok) { skipped.push(`${a.name}：${v.errs[0]}`); continue; }
+    S.journal.push(e); made++;
+  }
+  save(); renderAll();
+  let m = `${made} 件の減価償却仕訳を12月31日付で作りました。`;
+  if (removed) m += `（前に作った ${removed} 件は作り直しています）`;
+  if (skipped.length) m += `<ul>${skipped.map(x => `<li>${esc(x)}</li>`).join('')}</ul>`;
+  msg('asPostMsg', skipped.length ? 'warn' : 'ok', m);
+}
 
 /* ---------------- 起動 ---------------- */
 function renderAll() {
   const r = calc();
   renderHealth(r); renderRecent(); renderMonthFilter(); renderJournal();
-  renderLedger(); renderTrial(r); renderStmt(r); renderTax(r);
+  renderLedger(); renderAssets(); renderTrial(r); renderStmt(r); renderTax(r);
 }
 function boot() {
   if (!el('inDate').value) {
@@ -552,6 +814,6 @@ function boot() {
     el('inDate').value = (t.getFullYear() === S.year ? t : new Date(S.year, 11, 31)).toISOString().slice(0, 10);
   }
   TAXF.forEach(([id, k]) => el(id).value = S.tax[k] || '');
-  lines = blankLines(); renderLines(); renderSetup(); renderAll();
+  lines = blankLines(); renderLines(); renderSetup(); initAssetForm(); renderAll();
 }
 boot();

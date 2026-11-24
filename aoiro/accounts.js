@@ -22,6 +22,7 @@ const ACCOUNTS = [
   { code:'113', name:'一括償却資産',    side:'D', stmt:'BS', row:'asset' },
   { code:'114', name:'土地',            side:'D', stmt:'BS', row:'asset' },
   { code:'115', name:'敷金・保証金',    side:'D', stmt:'BS', row:'asset' },
+  { code:'116', name:'ソフトウエア',    side:'D', stmt:'BS', row:'asset' },
   { code:'190', name:'事業主貸',        side:'D', stmt:'BS', row:'asset' },
 
   // ---- 負債 ----
